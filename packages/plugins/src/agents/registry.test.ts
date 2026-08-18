@@ -5,6 +5,10 @@ const GLOBAL_HOOK_PROVIDERS = [
   'amp',
   'auggie',
   'claude',
+  // Account Pool variants of claude; their hooks resolve to the account's own
+  // config dir (see ./account-pool/variant.ts).
+  'claude-empresa',
+  'claude-personal',
   'codex',
   'commandcode',
   'copilot',

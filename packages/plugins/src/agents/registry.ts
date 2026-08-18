@@ -1,6 +1,9 @@
 // The single plugin registry
+import os from 'node:os';
 import type { CLIAgentPluginProvider } from '@emdash/core/services/agent-plugins/api/plugins';
 import { createPluginRegistry } from '@emdash/shared/plugins';
+import { poolAccountProfiles } from './account-pool/profiles';
+import { accountVariant } from './account-pool/variant';
 import { provider as amp } from './impl/amp';
 import { provider as antigravity } from './impl/antigravity';
 import { provider as auggie } from './impl/auggie';
@@ -80,4 +83,19 @@ for (const p of [
   zero,
 ]) {
   pluginRegistry.register(p);
+}
+
+/**
+ * Account Pool: register one provider variant per pool account, so several
+ * accounts of the same CLI can run concurrently (each conversation spawns with
+ * its own isolation env). The base providers stay registered — they keep
+ * working against the host's ambient login, and existing conversations already
+ * reference their ids.
+ */
+const accountPoolBases: Record<string, CLIAgentPluginProvider> = { claude, antigravity };
+const realHomeDir = os.homedir();
+for (const profile of poolAccountProfiles(realHomeDir)) {
+  const base = accountPoolBases[profile.provider];
+  if (!base) continue;
+  pluginRegistry.register(accountVariant(base, profile, { realHomeDir }));
 }

@@ -3,6 +3,7 @@ import { defineConfig } from 'tsdown';
 export default defineConfig({
   entry: {
     'primitives-path-api': 'src/primitives/path/api/index.ts',
+    'primitives-account-pool-api': 'src/primitives/account-pool/api/index.ts',
     'primitives-host-api': 'src/primitives/host/api/index.ts',
     'primitives-git-credentials-api': 'src/primitives/git-credentials/api/index.ts',
     'primitives-exclusion-policy-api': 'src/primitives/exclusion-policy/api/index.ts',

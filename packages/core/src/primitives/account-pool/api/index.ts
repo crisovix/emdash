@@ -12,9 +12,12 @@ export type PoolProvider = 'claude' | 'antigravity';
 export type PoolScope = 'work' | 'personal';
 
 export type PoolAccountProfile = {
+  /** Provider id of the account-bound plugin variant, e.g. 'claude-personal'. */
   id: string;
   provider: PoolProvider;
   scope: PoolScope;
+  /** Short display label for the agent picker, e.g. 'personal'. */
+  label: string;
   /** Isolated config dir for this account (CLAUDE_CONFIG_DIR for claude, fake HOME for antigravity). */
   dir: string;
 };

@@ -9,6 +9,7 @@ describe('envForAccount', () => {
       id: 'claude-personal',
       provider: 'claude',
       scope: 'personal',
+      label: 'personal',
       dir: '/home/u/.agentpool/claude-personal',
     };
     expect(envForAccount(profile, { realHomeDir: REAL_HOME })).toEqual({
@@ -21,6 +22,7 @@ describe('envForAccount', () => {
       id: 'gemini-personal',
       provider: 'antigravity',
       scope: 'personal',
+      label: 'personal',
       dir: '/home/u/.agentpool/gemini-personal',
     };
     expect(envForAccount(profile, { realHomeDir: REAL_HOME })).toEqual({
@@ -35,6 +37,7 @@ describe('envForAccount', () => {
       id: 'gemini-empresa',
       provider: 'antigravity',
       scope: 'work',
+      label: 'empresa',
       dir: '/home/u/.gemini-oddness',
     };
     const env = envForAccount(workProfile, { realHomeDir: REAL_HOME });
