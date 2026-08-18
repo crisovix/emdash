@@ -87,13 +87,19 @@ describe('account pool wire controller', () => {
   it('counts the auto router bindings', async () => {
     const home = seedHome();
     mkdirSync(path.join(home, '.agentpool'), { recursive: true });
+    // The routing store's own format: one binding per line, latest wins.
     writeFileSync(
-      path.join(home, '.agentpool', 'routing.json'),
-      JSON.stringify({ version: 1, routes: { c1: 'claude-personal', c2: 'claude-personal' } })
+      path.join(home, '.agentpool', 'routing.jsonl'),
+      [
+        JSON.stringify({ c: 'c1', a: 'claude-personal' }),
+        JSON.stringify({ c: 'c2', a: 'claude-personal' }),
+        JSON.stringify({ c: 'c3', a: 'claude-empresa' }),
+      ].join('\n') + '\n'
     );
     const parsed = accountPoolReportSchema.parse(await report(home));
-    const personal = parsed.accounts.find((a) => a.accountId === 'claude-personal')!;
-    expect(personal.boundConversations).toBe(2);
+    const byId = new Map(parsed.accounts.map((a) => [a.accountId, a.boundConversations]));
+    expect(byId.get('claude-personal')).toBe(2);
+    expect(byId.get('claude-empresa')).toBe(1);
   });
 
   it('reports zeros for a home with no accounts, instead of failing', async () => {

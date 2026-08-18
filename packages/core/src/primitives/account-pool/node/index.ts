@@ -96,8 +96,13 @@ async function* readEntries(files: string[], since?: number): AsyncGenerator<Tra
  * equivalent usage record on disk (see the fork's account-pool docs), so an
  * antigravity profile comes back with zeroed usage and state 'ok'.
  *
- * `since` skips files untouched before that instant — enough to scope a report
- * to a recent window without reading years of history.
+ * `since` scopes the report to a window. It skips files untouched before that
+ * instant, and then drops individual turns older than it: a long-running session
+ * touched today can hold turns from weeks ago, so filtering only by file would
+ * report those inside a "last 7 days" window.
+ *
+ * Availability is judged on the unfiltered entries, because a failure outside the
+ * window can still be the account's latest word on whether it works.
  */
 export async function readAccountReport(
   profile: PoolAccountProfile,
@@ -131,9 +136,18 @@ export async function readAccountReport(
   const entries: TranscriptEntry[] = [];
   for await (const entry of readEntries(files, options.since)) entries.push(entry);
 
+  const counted =
+    options.since === undefined
+      ? entries
+      : entries.filter((entry) => {
+          if (!entry.timestamp) return true;
+          const at = Date.parse(entry.timestamp);
+          return Number.isNaN(at) || at >= options.since!;
+        });
+
   return {
     profile,
-    usage: accumulateUsage(entries),
+    usage: accumulateUsage(counted),
     status: accountState(entries, {
       now: options.now,
       ...(options.rateLimitWindowMs !== undefined
@@ -195,13 +209,16 @@ export async function readAccountStateQuick(
   for (const file of files) {
     try {
       const info = await stat(file);
-      // Files older than the window cannot hold a limit that is still in force.
-      if (info.mtimeMs < options.now - window) continue;
       stamped.push({ file, mtimeMs: info.mtimeMs, size: info.size });
     } catch {
       // Raced with a session writing; skip.
     }
   }
+  // Newest first, then bounded by maxFiles below. Deliberately NOT filtered by
+  // age: only `rate_limit` expires, so dropping old files would hide a
+  // `needs_login` or `org_blocked` that is still in force — the account would
+  // look healthy again after a few idle hours and keep being handed work that
+  // cannot run. Expiry is `accountState`'s decision, which knows the kind.
   stamped.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   const entries: TranscriptEntry[] = [];

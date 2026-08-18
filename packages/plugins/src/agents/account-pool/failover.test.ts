@@ -64,6 +64,23 @@ describe('chooseAccount precedence', () => {
     }
   });
 
+  it('routes a keyless spawn consistently instead of deviating with nothing to record', () => {
+    // With no id there is no binding to write, so a deviation could not be
+    // reproduced on resume; fresh and resume must agree.
+    const fresh = chooseAccount(accounts, {
+      key: '',
+      isResuming: false,
+      unavailableIds: new Set(['acct-a']),
+    });
+    const resumed = chooseAccount(accounts, {
+      key: '',
+      isResuming: true,
+      unavailableIds: none,
+    });
+    expect(fresh.account.profile.id).toBe(resumed.account.profile.id);
+    expect(fresh.bind).toBe(false);
+  });
+
   it('still spawns when every account is unavailable, rather than refusing', () => {
     const { account } = chooseAccount(accounts, {
       key: 'k',
@@ -93,11 +110,43 @@ describe('createRoutingStore', () => {
     expect(reader.get('conv-1')).toBe('acct-a');
   });
 
-  it('degrades to no binding on a corrupt or foreign file instead of throwing', () => {
+  it('keeps both bindings when two worker processes bind at the same time', () => {
+    // The race this guards: with a read-modify-write, whichever process persisted
+    // second erased the other's binding. Losing the binding of a conversation that
+    // was deviated by failover sends its resume to an account without its session.
     const file = storePath();
-    writeFileSync(file, '{ this is not json');
-    expect(createRoutingStore(file).get('conv-1')).toBeUndefined();
+    const tuiWorker = createRoutingStore(file);
+    const acpWorker = createRoutingStore(file);
 
+    // Both observe the same (empty) state before either writes.
+    expect(tuiWorker.get('conv-x')).toBeUndefined();
+    expect(acpWorker.get('conv-y')).toBeUndefined();
+
+    tuiWorker.remember('conv-x', 'acct-a');
+    acpWorker.remember('conv-y', 'acct-a');
+
+    expect(tuiWorker.get('conv-x')).toBe('acct-a');
+    expect(tuiWorker.get('conv-y')).toBe('acct-a');
+  });
+
+  it('takes the latest line for a conversation, so a rebind wins', () => {
+    const file = storePath();
+    const store = createRoutingStore(file);
+    store.remember('conv-1', 'acct-a');
+    store.remember('conv-1', 'acct-b');
+    expect(store.get('conv-1')).toBe('acct-b');
+  });
+
+  it('skips unparsable lines instead of throwing, including a torn final line', () => {
+    const file = storePath();
+    writeFileSync(file, `{"c":"conv-1","a":"acct-a"}\n{ this is not js`);
+    const store = createRoutingStore(file);
+    expect(store.get('conv-1')).toBe('acct-a');
+    expect(store.get('conv-2')).toBeUndefined();
+  });
+
+  it('ignores a foreign file shape rather than trusting it', () => {
+    const file = storePath();
     writeFileSync(file, JSON.stringify({ version: 99, routes: { 'conv-1': 'acct-a' } }));
     expect(createRoutingStore(file).get('conv-1')).toBeUndefined();
   });
@@ -113,12 +162,15 @@ describe('createRoutingStore', () => {
     expect(store.get('conv-1')).toBeUndefined();
   });
 
-  it('caps the file so an unbounded conversation history cannot grow it forever', () => {
+  it('compacts the log so an unbounded conversation history cannot grow it forever', () => {
     const file = storePath();
     const store = createRoutingStore(file, { maxRoutes: 3 });
-    for (let i = 0; i < 6; i++) store.remember(`conv-${i}`, 'acct-a');
-    const routes = JSON.parse(readFileSync(file, 'utf-8')).routes as Record<string, string>;
-    expect(Object.keys(routes)).toEqual(['conv-3', 'conv-4', 'conv-5']);
+    // Compaction triggers past 2x the cap, then keeps the newest maxRoutes.
+    for (let i = 0; i < 9; i++) store.remember(`conv-${i}`, 'acct-a');
+
+    const lines = readFileSync(file, 'utf-8').trim().split('\n');
+    expect(lines.length).toBeLessThanOrEqual(6);
+    expect(store.get('conv-8')).toBe('acct-a');
     // A trimmed binding is a miss, which falls back to hash routing.
     expect(store.get('conv-0')).toBeUndefined();
   });

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -11,9 +11,9 @@ import path from 'node:path';
  * and resuming against the wrong config dir cannot find the session. So a
  * deviation has to be remembered.
  *
- * Kept as one small JSON file rather than in memory because the ACP worker and
- * the TUI worker are separate processes, and both spawn agents. Reads and writes
- * are synchronous because the only caller — a plugin's `buildCommand` — is
+ * Stored as one small file rather than in memory because the ACP worker and the
+ * TUI worker are separate processes, and both spawn agents. Reads and writes are
+ * synchronous because the only caller — a plugin's `buildCommand` — is
  * synchronous; the cost is trivial next to spawning a CLI process.
  *
  * Every operation fails open: a missing, unreadable, or corrupt file degrades to
@@ -26,113 +26,120 @@ export type RoutingStore = {
   remember(conversationId: string, accountId: string): void;
 };
 
-type RoutingFile = {
-  version: 1;
-  /** conversationId -> accountId */
-  routes: Record<string, string>;
-};
+/** One binding, kept short because the file is read on every spawn. */
+type Line = { c: string; a: string };
 
-function emptyFile(): RoutingFile {
-  return { version: 1, routes: {} };
-}
-
-function parse(raw: string): RoutingFile {
-  const parsed: unknown = JSON.parse(raw);
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    (parsed as RoutingFile).version !== 1 ||
-    typeof (parsed as RoutingFile).routes !== 'object' ||
-    (parsed as RoutingFile).routes === null
-  ) {
-    return emptyFile();
+function parseLines(raw: string): Map<string, string> {
+  const routes = new Map<string, string>();
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed === '') continue;
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      const { c, a } = parsed as Line;
+      // Later lines win, which is what makes an append a valid update.
+      if (typeof c === 'string' && typeof a === 'string' && c !== '') routes.set(c, a);
+    } catch {
+      // A torn final line is expected while another process appends.
+    }
   }
-  const routes: Record<string, string> = {};
-  for (const [key, value] of Object.entries((parsed as RoutingFile).routes)) {
-    if (typeof value === 'string') routes[key] = value;
-  }
-  return { version: 1, routes };
+  return routes;
 }
 
 /**
- * A store backed by `filePath`.
+ * A store backed by `filePath`, written as an append-only log.
  *
- * `maxRoutes` caps the file: conversations accumulate without bound, and this is
- * read synchronously on every spawn, so an ever-growing map would eventually cost
- * more than it saves. Oldest bindings are dropped first.
+ * Append rather than rewrite because two worker processes both bind conversations:
+ * a read-modify-write loses whichever update landed second, and losing the binding
+ * of a conversation that *was* deviated by failover breaks its resume. A single
+ * short `O_APPEND` write is atomic between processes, so both bindings survive.
+ * Bindings are only ever added, never edited, which is what makes a log sufficient.
  *
- * Be precise about what a dropped binding costs: resuming that conversation falls
- * back to the hash, which may pick a different account than the one holding its
- * session, and the resume then fails to find it. The cap is a deliberate trade —
- * only conversations older than `maxRoutes` others are exposed, and those are
- * long finished — but it is a correctness risk for a very old conversation, not
- * merely a loss of avoidance.
- *
- * Insertion order is what carries age here, which holds because conversation ids
- * are UUIDs: integer-like keys would be reordered by the JS object key rules.
+ * `maxRoutes` bounds the file, since conversations accumulate without end and this
+ * is read synchronously on every spawn. Compaction rewrites the newest bindings
+ * once the log grows past twice that. Two costs, both deliberate and bounded to
+ * conversations long finished: a compaction racing an append can drop that append,
+ * and a binding trimmed away falls back to the hash — which for a deviated
+ * conversation means its resume may not find its session.
  */
 export function createRoutingStore(
   filePath: string,
   options: { maxRoutes?: number } = {}
 ): RoutingStore {
   const maxRoutes = options.maxRoutes ?? 2000;
-  // Insertion order carries age, which is what the cap trims by.
-  let cache: RoutingFile | null = null;
 
-  function load(): RoutingFile {
-    if (cache) return cache;
+  function read(): { routes: Map<string, string>; lines: number } {
     try {
-      cache = parse(readFileSync(filePath, 'utf-8'));
+      const raw = readFileSync(filePath, 'utf-8');
+      const lines = raw.split('\n').filter((line) => line.trim() !== '').length;
+      return { routes: parseLines(raw), lines };
     } catch {
-      cache = emptyFile();
+      return { routes: new Map(), lines: 0 };
     }
-    return cache;
   }
 
-  function persist(next: RoutingFile): void {
+  /** Collapse the log to the newest bindings. Best effort; never throws. */
+  function compact(routes: Map<string, string>): void {
     try {
-      mkdirSync(path.dirname(filePath), { recursive: true });
-      // Write-then-rename so a concurrent reader never sees a half-written file.
-      // Two workers writing at once means last-one-wins on a lost binding, which
-      // degrades to hash routing rather than to a corrupt file.
+      const kept = [...routes.entries()].slice(-maxRoutes);
+      const body = kept.map(([c, a]) => JSON.stringify({ c, a })).join('\n');
       const tmp = `${filePath}.${process.pid}.tmp`;
-      writeFileSync(tmp, `${JSON.stringify(next)}\n`, 'utf-8');
+      writeFileSync(tmp, body === '' ? '' : `${body}\n`, 'utf-8');
+      // Rename so a concurrent reader never sees a half-written file.
       renameSync(tmp, filePath);
     } catch {
-      // Best effort: an unwritable store must not stop a spawn.
+      // Leaving the log long is harmless; it will be retried next time.
     }
   }
 
   return {
     get(conversationId) {
       if (conversationId === '') return undefined;
-      // Re-read rather than trust the cache: the other worker may have written
-      // this binding since, and a stale miss would route a resume incorrectly.
-      cache = null;
-      return load().routes[conversationId];
+      // Always re-read: the other worker may have appended this binding since,
+      // and a stale miss would route a resume to the wrong account.
+      return read().routes.get(conversationId);
     },
 
     remember(conversationId, accountId) {
-      if (conversationId === '') return;
-      cache = null;
-      const current = load();
-      if (current.routes[conversationId] === accountId) return;
+      if (conversationId === '' || accountId === '') return;
+      try {
+        const { routes, lines } = read();
+        if (routes.get(conversationId) === accountId) return;
 
-      const routes = { ...current.routes, [conversationId]: accountId };
-      const keys = Object.keys(routes);
-      const trimmed =
-        keys.length <= maxRoutes
-          ? routes
-          : Object.fromEntries(keys.slice(keys.length - maxRoutes).map((k) => [k, routes[k]!]));
+        mkdirSync(path.dirname(filePath), { recursive: true });
+        appendFileSync(
+          filePath,
+          `${JSON.stringify({ c: conversationId, a: accountId })}\n`,
+          'utf-8'
+        );
 
-      const next: RoutingFile = { version: 1, routes: trimmed };
-      cache = next;
-      persist(next);
+        if (lines + 1 > maxRoutes * 2) {
+          routes.set(conversationId, accountId);
+          compact(routes);
+        }
+      } catch {
+        // Best effort: an unwritable store must not stop a spawn.
+      }
     },
   };
 }
 
 /** Where the pool keeps its routing record: alongside the account dirs. */
 export function defaultRoutingStorePath(realHomeDir: string): string {
-  return path.join(realHomeDir, '.agentpool', 'routing.json');
+  return path.join(realHomeDir, '.agentpool', 'routing.jsonl');
+}
+
+/**
+ * Every binding in the log, for reporting. Exported so readers do not re-implement
+ * the log format — the store owns it.
+ *
+ * An absent or unreadable file yields an empty map: it means the auto router has
+ * not run, not that something is wrong.
+ */
+export function readRoutingBindings(filePath: string): Map<string, string> {
+  try {
+    return parseLines(readFileSync(filePath, 'utf-8'));
+  } catch {
+    return new Map();
+  }
 }

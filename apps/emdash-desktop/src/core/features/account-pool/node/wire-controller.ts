@@ -1,7 +1,10 @@
-import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import { readPoolReport, type AccountReport } from '@emdash/core/primitives/account-pool/node';
-import { defaultRoutingStorePath, poolAccountProfiles } from '@emdash/plugins/agents/account-pool';
+import {
+  defaultRoutingStorePath,
+  poolAccountProfiles,
+  readRoutingBindings,
+} from '@emdash/plugins/agents/account-pool';
 import { createController, type Controller } from '@emdash/wire/rpc';
 import { accountPoolContract, type AccountPoolEntry } from '../api/contract';
 
@@ -23,13 +26,11 @@ export function createAccountPoolWireController(
     report: async (input) => {
       const at = now();
       const since = input.days === undefined ? undefined : at - input.days * 86_400_000;
-      const [reports, bindings] = await Promise.all([
-        readPoolReport(poolAccountProfiles(homeDir), {
-          now: at,
-          ...(since !== undefined ? { since } : {}),
-        }),
-        readBindingCounts(homeDir),
-      ]);
+      const reports = await readPoolReport(poolAccountProfiles(homeDir), {
+        now: at,
+        ...(since !== undefined ? { since } : {}),
+      });
+      const bindings = readBindingCounts(homeDir);
 
       return {
         generatedAt: at,
@@ -66,18 +67,10 @@ function toEntry(report: AccountReport, bindings: Map<string, number>): AccountP
 }
 
 /** How many conversations the auto router has bound to each account. */
-async function readBindingCounts(homeDir: string): Promise<Map<string, number>> {
+function readBindingCounts(homeDir: string): Map<string, number> {
   const counts = new Map<string, number>();
-  try {
-    const raw = await readFile(defaultRoutingStorePath(homeDir), 'utf-8');
-    const parsed: unknown = JSON.parse(raw);
-    const routes = (parsed as { routes?: Record<string, unknown> }).routes ?? {};
-    for (const accountId of Object.values(routes)) {
-      if (typeof accountId !== 'string') continue;
-      counts.set(accountId, (counts.get(accountId) ?? 0) + 1);
-    }
-  } catch {
-    // No routing file means the auto router has not run yet, not an error.
+  for (const accountId of readRoutingBindings(defaultRoutingStorePath(homeDir)).values()) {
+    counts.set(accountId, (counts.get(accountId) ?? 0) + 1);
   }
   return counts;
 }

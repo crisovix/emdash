@@ -59,6 +59,11 @@ export function chooseAccount<T extends RoutableAccount>(
 
   if (input.isResuming) return { account: pickAccount(accounts, input.key), bind: false };
 
+  // Without a stable key there is nothing to record a deviation against, so
+  // avoidance would leave the resume unable to reproduce the choice. Route on the
+  // full list instead: consistent, even if it means using a limited account.
+  if (input.key === '') return { account: pickAccount(accounts, input.key), bind: false };
+
   const available = accounts.filter((a) => !input.unavailableIds.has(a.profile.id));
   // All unavailable means the information is useless, not that nothing can run:
   // fall back to the full list so a spawn is still attempted.

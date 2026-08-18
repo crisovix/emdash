@@ -11,14 +11,16 @@
  *   pnpm run pool:report -- --days 7
  *   pnpm run pool:report -- --json
  */
-import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import {
   readPoolReport,
   type AccountReport,
 } from '../../packages/core/src/primitives/account-pool/node/index.ts';
 import { poolAccountProfiles } from '../../packages/plugins/src/agents/account-pool/profiles.ts';
-import { defaultRoutingStorePath } from '../../packages/plugins/src/agents/account-pool/routing-store.ts';
+import {
+  defaultRoutingStorePath,
+  readRoutingBindings,
+} from '../../packages/plugins/src/agents/account-pool/routing-store.ts';
 
 const args = process.argv.slice(2);
 
@@ -110,22 +112,17 @@ if (unreadable.length > 0) {
 
 // What the auto router has actually bound, which is the only way to tell whether
 // it is spreading work or quietly funnelling it to one account.
-try {
-  const routingPath = defaultRoutingStorePath(homedir());
-  const parsed: unknown = JSON.parse(readFileSync(routingPath, 'utf-8'));
-  const routes = (parsed as { routes?: Record<string, string> }).routes ?? {};
+const routingPath = defaultRoutingStorePath(homedir());
+const bindings = readRoutingBindings(routingPath);
+if (bindings.size > 0) {
   const counts = new Map<string, number>();
-  for (const accountId of Object.values(routes)) {
+  for (const accountId of bindings.values()) {
     counts.set(accountId, (counts.get(accountId) ?? 0) + 1);
   }
-  if (counts.size > 0) {
-    console.log(`\nConversations bound by the auto router (${routingPath}):`);
-    for (const [accountId, count] of [...counts].sort((a, b) => b[1] - a[1])) {
-      console.log(`  ${accountId.padEnd(18)} ${String(count).padStart(5)}`);
-    }
+  console.log(`\nConversations bound by the auto router (${routingPath}):`);
+  for (const [accountId, count] of [...counts].sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${accountId.padEnd(18)} ${String(count).padStart(5)}`);
   }
-} catch {
-  // No routing file yet: the auto provider has not run, which is not an error.
 }
 
 const byModel = new Map<string, number>();
