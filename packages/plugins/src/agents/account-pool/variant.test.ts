@@ -30,6 +30,21 @@ const promptCtx = {
   model: '',
 };
 
+/** In-memory PluginFs rooted at the home dir, like the one callers pass in. */
+function fakeHomeFs(seed: Record<string, string> = {}) {
+  const files = new Map(Object.entries(seed));
+  return {
+    files,
+    fs: {
+      read: async (p: string) => files.get(p) ?? null,
+      write: async (p: string, content: string) => void files.set(p, content),
+      delete: async (p: string) => void files.delete(p),
+      exists: async (p: string) => files.has(p),
+      list: async () => [...files.keys()],
+    },
+  };
+}
+
 describe('accountVariant', () => {
   it('gives the variant its own provider id and a labelled name', () => {
     const variant = accountVariant(claude, claudeWork, { realHomeDir: REAL_HOME });
@@ -74,6 +89,60 @@ describe('accountVariant', () => {
     const dirOf = (v: typeof work) =>
       v.behavior.prompt!.buildCommand(promptCtx).env.CLAUDE_CONFIG_DIR;
     expect(dirOf(work)).not.toBe(dirOf(personalVariant));
+  });
+});
+
+describe('accountVariant config-file capabilities', () => {
+  const variant = accountVariant(claude, claudeWork, { realHomeDir: REAL_HOME });
+
+  it('writes trust into the account dir, not the host home', async () => {
+    const { files, fs } = fakeHomeFs();
+    await variant.behavior.trust!.trustWorkspace(fs, {
+      providerId: variant.metadata.id,
+      workspacePath: '/repo/worktree-1',
+    });
+    // Home-rooted fs + '.claude-oddness' prefix = <account dir>/.claude.json.
+    expect([...files.keys()]).toEqual(['.claude-oddness/.claude.json']);
+    expect(JSON.parse(files.get('.claude-oddness/.claude.json')!)).toMatchObject({
+      projects: { '/repo/worktree-1': { hasTrustDialogAccepted: true } },
+    });
+  });
+
+  it('reads MCP servers from the account dir', async () => {
+    const { fs } = fakeHomeFs({
+      '.claude-oddness/.claude.json': JSON.stringify({
+        mcpServers: { 'in-account': { command: 'account-server' } },
+      }),
+      // Same key in the host home must not leak into the account's view.
+      '.claude.json': JSON.stringify({ mcpServers: { 'in-home': { command: 'home-server' } } }),
+    });
+    const servers = await variant.behavior.mcp!.readServers(fs);
+    expect(servers.map((s) => s.name)).toEqual(['in-account']);
+  });
+
+  it('points hooks at the account dir', () => {
+    const roots = variant.behavior.hooks!.resolveConfigRoots({
+      env: {},
+      homeDir: REAL_HOME,
+      platform: 'linux',
+    });
+    expect(roots).toEqual(['/home/u/.claude-oddness']);
+  });
+
+  it('turns mcp and trust off for an account dir outside the home dir', () => {
+    const outside = accountVariant(
+      claude,
+      { ...claudeWork, dir: '/opt/elsewhere/claude' },
+      { realHomeDir: REAL_HOME }
+    );
+    expect(outside.capabilities.mcp).toEqual({ kind: 'none' });
+    expect(outside.capabilities.trust).toEqual({ kind: 'none' });
+    expect(outside.behavior.mcp).toBeUndefined();
+    expect(outside.behavior.trust).toBeUndefined();
+    // Spawn isolation still works — that never depended on the fs.
+    expect(outside.behavior.prompt!.buildCommand(promptCtx).env.CLAUDE_CONFIG_DIR).toBe(
+      '/opt/elsewhere/claude'
+    );
   });
 });
 
