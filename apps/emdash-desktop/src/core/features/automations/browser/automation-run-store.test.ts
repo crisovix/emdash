@@ -94,12 +94,14 @@ function overview(
       queued: 0,
       provisioning_workspace: 0,
       starting_session: 0,
+      awaiting_gate: 0,
       done: 0,
       failed: 0,
       skipped: 0,
       cancelled: 0,
       ...counts,
     },
+
     latestRun,
     nextScheduledRun: null,
   };

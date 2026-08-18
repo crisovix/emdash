@@ -56,6 +56,18 @@ export const cancelRunErrorSchema = z.discriminatedUnion('type', [
   runtimeUnavailableErrorSchema,
 ]);
 
+export const invalidRunStateErrorSchema = z.object({
+  type: z.literal('invalid-run-state'),
+  runId: automationRunIdSchema,
+  message: z.string(),
+});
+
+export const approveGateErrorSchema = z.discriminatedUnion('type', [
+  runNotFoundErrorSchema,
+  invalidRunStateErrorSchema,
+  runtimeUnavailableErrorSchema,
+]);
+
 export const runReadErrorSchema = runtimeUnavailableErrorSchema;
 
 export type InvalidScheduleError = z.infer<typeof invalidScheduleErrorSchema>;
@@ -63,4 +75,5 @@ export type DeployError = z.infer<typeof deployErrorSchema>;
 export type RemoveError = z.infer<typeof removeErrorSchema>;
 export type StartRunError = z.infer<typeof startRunErrorSchema>;
 export type CancelRunError = z.infer<typeof cancelRunErrorSchema>;
+export type ApproveGateError = z.infer<typeof approveGateErrorSchema>;
 export type RunReadError = z.infer<typeof runReadErrorSchema>;

@@ -1,4 +1,7 @@
 import {
+  approveGateErrorSchema,
+  approveGateInputSchema,
+  approveGateResultSchema,
   automationIdSchema,
   cancelRunErrorSchema,
   cancelRunInputSchema,
@@ -65,6 +68,11 @@ export const automationsContract = defineContract({
     input: startRunInputSchema.merge(projectIdField),
     data: startRunResultSchema,
     error: startRunErrorSchema,
+  }),
+  approveGate: fallible({
+    input: approveGateInputSchema.merge(projectIdField),
+    data: approveGateResultSchema,
+    error: approveGateErrorSchema,
   }),
   cancelRun: fallible({
     input: cancelRunInputSchema.merge(projectIdField),

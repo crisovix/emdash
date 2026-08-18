@@ -1,4 +1,4 @@
-import type { AutomationRun } from '@emdash/core/runtimes/automations/api';
+import { resolveDeploymentSteps, type AutomationRun } from '@emdash/core/runtimes/automations/api';
 import type { ConversationConfig } from '@core/primitives/conversations/api';
 import type { AutomationRunMeta, CreateTaskParams } from '@core/primitives/tasks/api';
 import type { WorkspaceConfig } from '@core/primitives/workspaces/api';
@@ -46,7 +46,11 @@ export function conversationForRun(
   taskId: string
 ): ConversationInsert | undefined {
   if (!runtimeRun.conversationId) return undefined;
-  const agent = runtimeRun.configSnapshot.agent;
+  const steps = resolveDeploymentSteps(runtimeRun.configSnapshot);
+  const step = steps[runtimeRun.currentStepIndex ?? 0] ?? steps[0];
+  const agent = step?.agent ?? runtimeRun.configSnapshot.agent;
+  if (!agent) return undefined;
+
   const config: ConversationConfig =
     agent.type === 'acp'
       ? {
@@ -67,7 +71,7 @@ export function conversationForRun(
     id: runtimeRun.conversationId,
     projectId,
     taskId,
-    title: agent.title ?? runtimeRun.configSnapshot.name,
+    title: agent.title ?? step?.name ?? runtimeRun.configSnapshot.name,
     provider: agent.start.providerId,
     config,
     providerSessionId: runtimeRun.sessionId,

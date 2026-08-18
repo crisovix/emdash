@@ -12,6 +12,7 @@ export const automationRunStatuses = [
   'queued',
   'provisioning_workspace',
   'starting_session',
+  'awaiting_gate',
   'done',
   'failed',
   'skipped',
@@ -27,12 +28,27 @@ export const automationRunErrorStepSchema = z.enum([
   'provision_workspace',
   'start_session',
   'run',
+  'gate',
+  'account_policy',
 ]);
 
 export const automationRunErrorSchema = z.object({
   step: automationRunErrorStepSchema,
   code: nonBlankStringSchema,
   message: z.string().optional(),
+});
+
+export const stepRunRecordSchema = z.object({
+  stepIndex: z.number().int().nonnegative(),
+  stepId: nonBlankStringSchema,
+  name: nonBlankStringSchema,
+  providerId: nonBlankStringSchema,
+  conversationId: nonBlankStringSchema,
+  sessionId: nonBlankStringSchema.nullable(),
+  status: z.enum(['running', 'done', 'failed', 'skipped']),
+  startedAt: z.number().int().nonnegative(),
+  finishedAt: z.number().int().nonnegative().nullable(),
+  error: automationRunErrorSchema.nullable().optional(),
 });
 
 export const automationRunSchema = z.object({
@@ -51,6 +67,8 @@ export const automationRunSchema = z.object({
   branchName: nonBlankStringSchema.nullable(),
   conversationId: nonBlankStringSchema.nullable(),
   sessionId: nonBlankStringSchema.nullable(),
+  currentStepIndex: z.number().int().nonnegative().optional(),
+  stepHistory: z.array(stepRunRecordSchema).optional(),
   error: automationRunErrorSchema.nullable(),
 });
 
@@ -59,4 +77,5 @@ export type AutomationRunStatus = z.infer<typeof automationRunStatusSchema>;
 export type AutomationRunTriggerKind = z.infer<typeof automationRunTriggerKindSchema>;
 export type AutomationRunErrorStep = z.infer<typeof automationRunErrorStepSchema>;
 export type AutomationRunError = z.infer<typeof automationRunErrorSchema>;
+export type StepRunRecord = z.infer<typeof stepRunRecordSchema>;
 export type AutomationRun = z.infer<typeof automationRunSchema>;

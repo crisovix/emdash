@@ -7,6 +7,7 @@ export function createAutomationsController(runtime: AutomationsRuntime): Contro
     deploy: (input) => runtime.deploy(input),
     remove: (input) => runtime.remove(input),
     startRun: (input) => runtime.startRun(input),
+    approveGate: (input) => runtime.approveGate(input),
     cancelRun: (input) => runtime.cancelRun(input),
     getRun: (input) => runtime.getRun(input),
     listRuns: (input) => runtime.listRuns(input),

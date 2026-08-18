@@ -4,6 +4,7 @@ import type {
   AutomationRunError,
   AutomationRunId,
   AutomationRunStatus,
+  StepRunRecord,
 } from '../../api/run';
 import type { AutomationRunStore } from '../persistence/run-store';
 
@@ -46,32 +47,83 @@ export class AutomationRunTransitions {
 
   markStartingSession(
     runId: AutomationRunId,
-    provisioned: { workspace: HostFileRef; branchName: string | null }
+    provisioned: {
+      workspace?: HostFileRef;
+      branchName?: string | null;
+      currentStepIndex?: number;
+      stepHistory?: StepRunRecord[];
+    }
   ): AutomationRun | null {
     const transition: RunTransition = {
-      from: ['provisioning_workspace'],
+      from: ['provisioning_workspace', 'awaiting_gate', 'starting_session'],
       to: 'starting_session',
     };
     return this.transition(runId, transition, {
       status: transition.to,
-      workspace: provisioned.workspace,
-      branchName: provisioned.branchName,
+      ...(provisioned.workspace && { workspace: provisioned.workspace }),
+      ...(provisioned.branchName !== undefined && { branchName: provisioned.branchName }),
+      ...(provisioned.currentStepIndex !== undefined && {
+        currentStepIndex: provisioned.currentStepIndex,
+      }),
+      ...(provisioned.stepHistory && { stepHistory: provisioned.stepHistory }),
+    });
+  }
+
+  markAwaitingGate(
+    runId: AutomationRunId,
+    stepDetails: {
+      currentStepIndex: number;
+      stepHistory: StepRunRecord[];
+      conversationId: string;
+      sessionId: string | null;
+    }
+  ): AutomationRun | null {
+    const transition: RunTransition = {
+      from: ['starting_session'],
+      to: 'awaiting_gate',
+    };
+    return this.transition(runId, transition, {
+      status: transition.to,
+      currentStepIndex: stepDetails.currentStepIndex,
+      stepHistory: stepDetails.stepHistory,
+      conversationId: stepDetails.conversationId,
+      sessionId: stepDetails.sessionId,
+    });
+  }
+
+  approveGate(runId: AutomationRunId, nextStepIndex: number): AutomationRun | null {
+    const transition: RunTransition = {
+      from: ['awaiting_gate'],
+      to: 'starting_session',
+    };
+    return this.transition(runId, transition, {
+      status: transition.to,
+      currentStepIndex: nextStepIndex,
     });
   }
 
   markDone(
     runId: AutomationRunId,
-    session: { conversationId: string; sessionId: string | null },
+    session: {
+      conversationId: string;
+      sessionId: string | null;
+      currentStepIndex?: number;
+      stepHistory?: StepRunRecord[];
+    },
     finishedAt: number
   ): AutomationRun | null {
     const transition: RunTransition = {
-      from: ['starting_session'],
+      from: ['starting_session', 'awaiting_gate'],
       to: 'done',
     };
     return this.transition(runId, transition, {
       status: transition.to,
       conversationId: session.conversationId,
       sessionId: session.sessionId,
+      ...(session.currentStepIndex !== undefined && {
+        currentStepIndex: session.currentStepIndex,
+      }),
+      ...(session.stepHistory && { stepHistory: session.stepHistory }),
       finishedAt,
     });
   }
@@ -79,16 +131,19 @@ export class AutomationRunTransitions {
   markFailed(
     runId: AutomationRunId,
     error: AutomationRunError,
-    finishedAt: number
+    finishedAt: number,
+    extra?: { currentStepIndex?: number; stepHistory?: StepRunRecord[] }
   ): AutomationRun | null {
     const transition: RunTransition = {
-      from: ['scheduled', 'queued', 'provisioning_workspace', 'starting_session'],
+      from: ['scheduled', 'queued', 'provisioning_workspace', 'starting_session', 'awaiting_gate'],
       to: 'failed',
     };
     return this.transition(runId, transition, {
       status: transition.to,
       error,
       finishedAt,
+      ...(extra?.currentStepIndex !== undefined && { currentStepIndex: extra.currentStepIndex }),
+      ...(extra?.stepHistory && { stepHistory: extra.stepHistory }),
     });
   }
 
@@ -110,7 +165,7 @@ export class AutomationRunTransitions {
 
   markCancelled(runId: AutomationRunId, finishedAt: number): AutomationRun | null {
     const transition: RunTransition = {
-      from: ['queued', 'provisioning_workspace', 'starting_session'],
+      from: ['queued', 'provisioning_workspace', 'starting_session', 'awaiting_gate'],
       to: 'cancelled',
     };
     return this.transition(runId, transition, { status: transition.to, finishedAt });

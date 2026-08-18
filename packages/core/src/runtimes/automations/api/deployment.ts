@@ -88,22 +88,65 @@ export const automationAgentConfigSchema = z.discriminatedUnion('type', [
   automationTuiAgentConfigSchema,
 ]);
 
-export const automationDeploymentSchema = z.object({
-  automationId: automationIdSchema,
-  revision: z.number().int().positive(),
-  enabled: z.boolean(),
+export const pipelineStepGateSchema = z.enum(['auto', 'manual_approval']);
+export const pipelineStepAccountPolicySchema = z.enum([
+  'any',
+  'different-from-previous',
+  'same-as-first',
+]);
+
+export const pipelineStepSchema = z.object({
+  id: nonBlankStringSchema,
+  name: nonBlankStringSchema,
+  agent: automationAgentConfigSchema,
+  gate: pipelineStepGateSchema.default('auto'),
+  accountPolicy: pipelineStepAccountPolicySchema.optional(),
+});
+
+export const automationDeploymentSchema = z
+  .object({
+    automationId: automationIdSchema,
+    revision: z.number().int().positive(),
+    enabled: z.boolean(),
+    name: nonBlankStringSchema,
+    schedule: automationScheduleSchema,
+    agent: automationAgentConfigSchema.optional(),
+    steps: z.array(pipelineStepSchema).min(1).optional(),
+    workspace: automationWorkspaceConfigSchema,
+  })
+  .refine((data) => Boolean(data.agent || (data.steps && data.steps.length > 0)), {
+    message: 'Either `agent` or `steps` must be provided',
+  });
+
+export const automationRunConfigSnapshotSchema = z.object({
   name: nonBlankStringSchema,
   schedule: automationScheduleSchema,
-  agent: automationAgentConfigSchema,
+  agent: automationAgentConfigSchema.optional(),
+  steps: z.array(pipelineStepSchema).min(1).optional(),
   workspace: automationWorkspaceConfigSchema,
 });
 
-export const automationRunConfigSnapshotSchema = automationDeploymentSchema.pick({
-  name: true,
-  schedule: true,
-  agent: true,
-  workspace: true,
-});
+export function resolveDeploymentSteps(
+  deployment: Pick<AutomationDeployment, 'name'> & {
+    agent?: AutomationAgentConfig;
+    steps?: PipelineStep[];
+  }
+): PipelineStep[] {
+  if (deployment.steps && deployment.steps.length > 0) {
+    return deployment.steps;
+  }
+  if (deployment.agent) {
+    return [
+      {
+        id: 'step-0',
+        name: deployment.name,
+        agent: deployment.agent,
+        gate: 'auto',
+      },
+    ];
+  }
+  throw new Error('Deployment must have either `agent` or `steps`');
+}
 
 export type AutomationId = z.infer<typeof automationIdSchema>;
 export type AutomationGitRemote = z.infer<typeof automationGitRemoteSchema>;
@@ -115,5 +158,8 @@ export type AutomationSchedule = z.infer<typeof automationScheduleSchema>;
 export type AutomationAcpAgentConfig = z.infer<typeof automationAcpAgentConfigSchema>;
 export type AutomationTuiAgentConfig = z.infer<typeof automationTuiAgentConfigSchema>;
 export type AutomationAgentConfig = z.infer<typeof automationAgentConfigSchema>;
+export type PipelineStepGate = z.infer<typeof pipelineStepGateSchema>;
+export type PipelineStepAccountPolicy = z.infer<typeof pipelineStepAccountPolicySchema>;
+export type PipelineStep = z.infer<typeof pipelineStepSchema>;
 export type AutomationDeployment = z.infer<typeof automationDeploymentSchema>;
 export type AutomationRunConfigSnapshot = z.infer<typeof automationRunConfigSnapshotSchema>;

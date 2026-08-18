@@ -40,6 +40,15 @@ export const getRunResultSchema = z.object({
   run: automationRunSchema.nullable(),
 });
 
+export const approveGateInputSchema = z.object({
+  automationId: automationIdSchema,
+  runId: automationRunIdSchema,
+});
+
+export const approveGateResultSchema = z.object({
+  run: automationRunSchema,
+});
+
 export const listRunsInputSchema = z.object({
   automationId: automationIdSchema,
   status: automationRunStatusSchema.optional(),
@@ -91,6 +100,8 @@ export type RemoveInput = z.infer<typeof removeInputSchema>;
 export type StartRunInput = z.infer<typeof startRunInputSchema>;
 export type StartRunResult = z.infer<typeof startRunResultSchema>;
 export type CancelRunInput = z.infer<typeof cancelRunInputSchema>;
+export type ApproveGateInput = z.infer<typeof approveGateInputSchema>;
+export type ApproveGateResult = z.infer<typeof approveGateResultSchema>;
 export type GetRunInput = z.infer<typeof getRunInputSchema>;
 export type GetRunResult = z.infer<typeof getRunResultSchema>;
 export type ListRunsInput = z.infer<typeof listRunsInputSchema>;

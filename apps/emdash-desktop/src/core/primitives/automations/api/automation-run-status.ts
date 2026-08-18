@@ -3,6 +3,7 @@ export type AutomationRunStatus =
   | 'queued'
   | 'provisioning_workspace'
   | 'starting_session'
+  | 'awaiting_gate'
   | 'done'
   | 'failed'
   | 'skipped'

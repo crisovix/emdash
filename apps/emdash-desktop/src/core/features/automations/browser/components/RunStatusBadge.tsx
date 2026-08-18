@@ -54,6 +54,15 @@ export function RunStatusBadge({ status, error }: RunStatusBadgeProps) {
     );
   }
 
+  if (status === 'awaiting_gate') {
+    return (
+      <span className={cn(BASE, 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-medium')}>
+        <Clock className="size-3 animate-pulse" />
+        Awaiting approval
+      </span>
+    );
+  }
+
   if (status === 'queued') {
     return (
       <span className={cn(BASE, 'bg-background-info text-foreground-info')}>

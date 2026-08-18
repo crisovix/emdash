@@ -129,6 +129,29 @@ export function useAutomationFormState(
     initialConversation.setModel(seedModel);
   }
 
+  const [pipelineSteps, setPipelineSteps] = useState<
+    Array<{
+      id: string;
+      name: string;
+      providerId: string;
+      prompt: string;
+      gate: 'auto' | 'manual_approval';
+      accountPolicy?: 'any' | 'different-from-previous' | 'same-as-first';
+    }>
+  >(() => {
+    if (initialTemplate?.pipelineSteps) {
+      return initialTemplate.pipelineSteps.map((s, idx) => ({
+        id: s.id || `step-${idx + 1}`,
+        name: s.name,
+        providerId: s.providerId,
+        prompt: s.initialPrompt,
+        gate: s.gate ?? 'auto',
+        accountPolicy: s.accountPolicy,
+      }));
+    }
+    return [];
+  });
+
   const seedType = seedConversationConfig?.type;
   const [chatUiSeeded, setChatUiSeeded] = useState(false);
   if (!chatUiSeeded && seedType === 'acp') {
@@ -229,13 +252,37 @@ export function useAutomationFormState(
     return JSON.parse(JSON.stringify(result)) as StoredAutomationTaskConfig;
   }
 
-  const triggerConfig: TriggerConfig = { expr: cronExpr.trim(), tz: cronTz };
+  const availableProviders = useMemo(() => {
+    if (!agents?.length) {
+      return [
+        { id: 'claude-empresa', name: 'Claude (Team)' },
+        { id: 'claude-personal', name: 'Claude (Personal)' },
+        { id: 'gemini-empresa', name: 'Gemini (Empresa)' },
+        { id: 'gemini-personal', name: 'Gemini (Personal)' },
+      ];
+    }
+    return agents.map((a) => ({ id: a.id, name: a.name || a.id }));
+  }, [agents]);
 
   function applyTemplate(template: BuiltinAutomationTemplate) {
     setName(template.name);
     setCronExpr(template.defaultTrigger.expr);
     initialConversation.setPrompt(template.defaultConversationConfig.initialPrompt);
+    if (template.pipelineSteps) {
+      setPipelineSteps(
+        template.pipelineSteps.map((s, idx) => ({
+          id: s.id || `step-${idx + 1}`,
+          name: s.name,
+          providerId: s.providerId,
+          prompt: s.initialPrompt,
+          gate: s.gate ?? 'auto',
+          accountPolicy: s.accountPolicy,
+        }))
+      );
+    }
   }
+
+  const triggerConfig: TriggerConfig = { expr: cronExpr.trim(), tz: cronTz };
 
   return {
     name,
@@ -254,6 +301,9 @@ export function useAutomationFormState(
     prompt,
     provider,
     model,
+    pipelineSteps,
+    setPipelineSteps,
+    availableProviders,
     canSave,
     triggerConfig,
     applyTemplate,

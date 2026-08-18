@@ -128,6 +128,11 @@ export class AutomationScheduler {
     return this.runStore.getRun(run.id) ?? run;
   }
 
+  resumeRun(run: AutomationRun): void {
+    if (this.workers.has(run.id)) return;
+    this.startWorker(run);
+  }
+
   cancelRun(runId: AutomationRunId): AutomationRun | null {
     const run = this.runStore.getRun(runId);
     if (!run) return null;

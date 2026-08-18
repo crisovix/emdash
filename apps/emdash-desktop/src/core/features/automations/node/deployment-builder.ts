@@ -176,6 +176,24 @@ async function buildAutomationDeploymentOnce(
           title,
         };
 
+  const steps = conversation.pipelineSteps?.length
+    ? conversation.pipelineSteps.map((step) => ({
+        id: step.id,
+        name: step.name,
+        gate: step.gate,
+        accountPolicy: step.accountPolicy,
+        agent: {
+          type: 'acp' as const,
+          start: {
+            providerId: step.providerId,
+            model: step.model?.trim() || null,
+            initialQueue: [{ text: step.prompt.trim() || prompt }],
+          },
+          title: `${automation.name.trim()} - ${step.name}`,
+        },
+      }))
+    : undefined;
+
   return ok({
     automationId: automation.id,
     revision: automation.revision,
@@ -186,6 +204,7 @@ async function buildAutomationDeploymentOnce(
       tz: automation.triggerConfig.tz?.trim() || getLocalTimeZone(),
     },
     agent,
+    steps,
     workspace,
   });
 }

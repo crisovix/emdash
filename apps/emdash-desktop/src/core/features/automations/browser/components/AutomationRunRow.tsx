@@ -14,6 +14,7 @@ import { useNavigate } from '@core/primitives/navigation/browser/navigation-hook
 import { cn } from '@core/primitives/styling/browser/cn';
 import { formatAutomationError } from '../automation-run-format';
 import { useAutomationRun } from '../use-automations';
+import { PipelineStepTracker } from './PipelineStepTracker';
 import { RunMetaLine } from './RunMetaLine';
 import { TaskDataLine } from './TaskDataLine';
 import { TaskPlaceholder } from './TaskPlaceholder';
@@ -104,6 +105,7 @@ export const AutomationRunRow = observer(function AutomationRunRow({
         runStatus={run.status}
         error={run.error}
       />
+      <PipelineStepTracker run={run} automationId={automationId} projectId={projectId} />
     </div>
   );
 });

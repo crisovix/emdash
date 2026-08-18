@@ -1,6 +1,7 @@
 import { defineContract, eventStream, fallible } from '@emdash/wire/rpc';
 import { z } from 'zod';
 import {
+  approveGateErrorSchema,
   cancelRunErrorSchema,
   deployErrorSchema,
   runReadErrorSchema,
@@ -8,6 +9,8 @@ import {
   startRunErrorSchema,
 } from './errors';
 import {
+  approveGateInputSchema,
+  approveGateResultSchema,
   cancelRunInputSchema,
   deployInputSchema,
   deployResultSchema,
@@ -42,11 +45,17 @@ export const automationsContract = defineContract({
     data: startRunResultSchema,
     error: startRunErrorSchema,
   }),
+  approveGate: fallible({
+    input: approveGateInputSchema,
+    data: approveGateResultSchema,
+    error: approveGateErrorSchema,
+  }),
   cancelRun: fallible({
     input: cancelRunInputSchema,
     data: z.void(),
     error: cancelRunErrorSchema,
   }),
+
   getRun: fallible({
     input: getRunInputSchema,
     data: getRunResultSchema,

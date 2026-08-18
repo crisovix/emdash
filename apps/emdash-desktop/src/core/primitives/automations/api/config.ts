@@ -14,6 +14,18 @@ export const automationTriggerConfig = defineVersionedSchema()
   .unversioned(triggerConfigSchema)
   .build();
 
+export const pipelineStepConfigSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  providerId: z.string(),
+  prompt: z.string(),
+  gate: z.enum(['auto', 'manual_approval']).default('auto'),
+  accountPolicy: z.enum(['any', 'different-from-previous', 'same-as-first']).optional(),
+  model: z.string().optional(),
+});
+
+export type PipelineStepConfig = z.infer<typeof pipelineStepConfigSchema>;
+
 export const conversationConfigSchema = z.object({
   prompt: z.string(),
   provider: z.string(),
@@ -23,6 +35,8 @@ export const conversationConfigSchema = z.object({
   model: z.string().optional(),
   /** Conversation transport: 'pty' for terminal or 'acp' for structured chat UI. */
   type: z.enum(['pty', 'acp']).optional(),
+  /** Multi-agent pipeline steps executed sequentially in the same worktree. */
+  pipelineSteps: z.array(pipelineStepConfigSchema).optional(),
 });
 
 export type ConversationConfig = z.infer<typeof conversationConfigSchema>;

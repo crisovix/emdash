@@ -6,6 +6,7 @@ import type { StoreHandle } from '#primitives/sqlite-store/api';
 import { automationsContract } from '../api/contract';
 import type { AutomationId } from '../api/deployment';
 import type {
+  ApproveGateError,
   CancelRunError,
   DeployError,
   RunReadError,
@@ -14,6 +15,8 @@ import type {
 } from '../api/errors';
 import { automationRunStatuses, type AutomationRun } from '../api/run';
 import type {
+  ApproveGateInput,
+  ApproveGateResult,
   CancelRunInput,
   DeployInput,
   DeployResult,
@@ -171,6 +174,38 @@ export class AutomationsRuntime {
     return ok({ run });
   }
 
+  async approveGate(input: ApproveGateInput): Promise<Result<ApproveGateResult, ApproveGateError>> {
+    const { automationId, runId } = input;
+    const run = this.runStore.getRunForAutomation(automationId, runId);
+    if (!run) {
+      return err({
+        type: 'run-not-found',
+        runId,
+        message: `Run ${runId} not found`,
+      });
+    }
+    if (run.status !== 'awaiting_gate') {
+      return err({
+        type: 'invalid-run-state',
+        runId,
+        message: `Run ${runId} is in status '${run.status}', expected 'awaiting_gate'`,
+      });
+    }
+
+    const nextStepIndex = (run.currentStepIndex ?? 0) + 1;
+    const updated = this.transitions.approveGate(runId, nextStepIndex);
+    if (!updated) {
+      return err({
+        type: 'invalid-run-state',
+        runId,
+        message: `Failed to transition run ${runId} from awaiting_gate`,
+      });
+    }
+
+    this.scheduler.resumeRun(updated);
+    return ok({ run: updated });
+  }
+
   cancelRun(input: CancelRunInput): Result<void, CancelRunError> {
     const { automationId, runId } = input;
     const run = this.runStore.getRun(runId);
@@ -181,6 +216,7 @@ export class AutomationsRuntime {
         message: `Run ${runId} not found`,
       });
     }
+
     if (!this.scheduler.cancelRun(runId)) {
       return err({
         type: 'run-not-found',

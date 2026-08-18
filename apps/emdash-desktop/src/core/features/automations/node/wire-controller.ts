@@ -49,6 +49,8 @@ export function createAutomationsWireController(options: {
     getTargetAvailability: ({ projectId }) => automationsService.getTargetAvailability(projectId),
     startRun: async ({ projectId, ...input }) =>
       (await resolveClient(projectId)).automations.startRun(input),
+    approveGate: async ({ projectId, ...input }) =>
+      (await resolveClient(projectId)).automations.approveGate(input),
     cancelRun: async ({ projectId, ...input }) =>
       (await resolveClient(projectId)).automations.cancelRun(input),
     getRun: async ({ projectId, ...input }) =>

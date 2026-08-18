@@ -7,6 +7,7 @@ import { TaskConfigPanel } from '@core/features/tasks/contributions/browser/task
 import { TaskStateProvider } from '@core/features/tasks/contributions/browser/task-config/task-state-context';
 import { WorkspaceSettingsSection } from '@core/features/tasks/contributions/browser/task-config/workspace-settings-section';
 import type { AutomationFormState } from '../useAutomationFormState';
+import { PipelineStepsEditor } from './PipelineStepsEditor';
 
 interface AutomationSettingsFieldsProps {
   state: AutomationFormState;
@@ -34,6 +35,9 @@ export function AutomationSettingsFields({
     effectiveProjectId,
     isUnborn,
     hasRepository,
+    pipelineSteps,
+    setPipelineSteps,
+    availableProviders,
     setProjectId,
   } = state;
 
@@ -81,6 +85,20 @@ export function AutomationSettingsFields({
                       showAutoApproveToggle={false}
                       requirePromptDelivery={true}
                     />
+                  ),
+                },
+                {
+                  value: 'pipeline',
+                  label: `Pipeline Steps${pipelineSteps.length > 0 ? ` (${pipelineSteps.length})` : ''}`,
+                  content: (
+                    <div className="p-1">
+                      <PipelineStepsEditor
+                        steps={pipelineSteps}
+                        onChange={setPipelineSteps}
+                        availableProviders={availableProviders}
+                        disabled={disabled}
+                      />
+                    </div>
                   ),
                 },
                 {

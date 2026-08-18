@@ -1,10 +1,45 @@
-import { BookOpen, Bug, FlaskConical, Mail, Search, Wrench } from 'lucide-react';
+import {
+  BookOpen,
+  Bug,
+  FlaskConical,
+  Layers,
+  Mail,
+  Search,
+  ShieldCheck,
+  Wrench,
+} from 'lucide-react';
 import type { BuiltinAutomationTemplate } from './automation-template';
 
 const TEST_COVERAGE_PROMPT =
   'Inspect recent merged code for meaningful regression risk and add the smallest deterministic tests for weakly covered behavior. Prioritize new code paths, bug fixes without tests, edge-case parsing, concurrency, permissions, validation, shared utilities, and core flows. Avoid low-signal snapshots and cosmetic-only changes. Follow existing test conventions, run relevant validation, and summarize what risky behavior is now covered.';
 
 export const builtinAutomationCatalog: BuiltinAutomationTemplate[] = [
+  {
+    id: 'multi-agent-feature-orchestrator',
+    category: 'Multi-agent',
+    name: 'Multi-agent feature pipeline',
+    description:
+      'Plan architecture with Claude Opus Team, implement code with Gemini Pro in Antigravity, and review diff with Claude Personal',
+    icon: Layers,
+    defaultTrigger: { expr: '0 10 * * 1', tz: 'UTC' },
+    defaultConversationConfig: {
+      initialPrompt:
+        'Plan architecture in docs/plan.md, implement changes across the codebase with tests, and review final git diff before handoff.',
+    },
+  },
+  {
+    id: 'autonomous-pr-review-gate',
+    category: 'Multi-agent',
+    name: 'PR security review & gate',
+    description:
+      'Audit PR with Claude Team, verify deterministic tests with Gemini Pro, and pause at manual approval gate',
+    icon: ShieldCheck,
+    defaultTrigger: { expr: '0 9 * * 1', tz: 'UTC' },
+    defaultConversationConfig: {
+      initialPrompt:
+        'Audit recent pull requests and branches for security vulnerabilities, run test suite, and generate review summary.',
+    },
+  },
   {
     id: 'critical-bug-finder',
     category: 'Code quality',

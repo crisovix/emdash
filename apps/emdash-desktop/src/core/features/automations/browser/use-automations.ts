@@ -92,6 +92,30 @@ export function useStopAutomationRun() {
   });
 }
 
+export function useApproveAutomationGate() {
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      automationId,
+      runId,
+    }: {
+      projectId: string;
+      automationId: string;
+      runId: string;
+    }) => {
+      const result = await (
+        await getAutomationsClient()
+      ).approveGate({
+        projectId,
+        automationId,
+        runId,
+      });
+      if (!result.success) throw new Error(result.error.message);
+      return result.data.run;
+    },
+  });
+}
+
 export function useAdoptAutomationRun() {
   return useMutation({
     mutationFn: async ({ automationId, runId }: { automationId: string; runId: string }) => {

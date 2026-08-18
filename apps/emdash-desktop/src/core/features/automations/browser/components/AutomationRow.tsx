@@ -38,6 +38,7 @@ const RUN_STATUS_ICON: Record<
   queued: { Icon: Clock, textClass: 'text-foreground-muted' },
   provisioning_workspace: { Icon: Loader2, textClass: 'text-foreground-muted', spin: true },
   starting_session: { Icon: Loader2, textClass: 'text-foreground-muted', spin: true },
+  awaiting_gate: { Icon: Clock, textClass: 'text-amber-500' },
   done: { Icon: CheckCircle2, textClass: 'text-foreground-success' },
   failed: { Icon: XCircle, textClass: 'text-foreground-error' },
   skipped: { Icon: MinusCircle, textClass: 'text-foreground-muted' },

@@ -83,7 +83,18 @@ export const CreateAutomationView = observer(function CreateAutomationView({
       autoApprove: false,
       model: formState.model ?? undefined,
       type: useChatUi ? 'acp' : 'pty',
+      ...(formState.pipelineSteps.length > 0 && {
+        pipelineSteps: formState.pipelineSteps.map((s) => ({
+          id: s.id,
+          name: s.name,
+          providerId: s.providerId,
+          prompt: s.prompt,
+          gate: s.gate,
+          accountPolicy: s.accountPolicy,
+        })),
+      }),
     };
+
     try {
       const trimmedName = name.trim();
       const saved = await create.mutateAsync({
