@@ -2,6 +2,7 @@
 import os from 'node:os';
 import type { CLIAgentPluginProvider } from '@emdash/core/services/agent-plugins/api/plugins';
 import { createPluginRegistry } from '@emdash/shared/plugins';
+import { autoAccountProvider } from './account-pool/auto';
 import { poolAccountProfiles } from './account-pool/profiles';
 import { accountVariant } from './account-pool/variant';
 import { provider as amp } from './impl/amp';
@@ -94,8 +95,19 @@ for (const p of [
  */
 const accountPoolBases: Record<string, CLIAgentPluginProvider> = { claude, antigravity };
 const realHomeDir = os.homedir();
-for (const profile of poolAccountProfiles(realHomeDir)) {
+const poolProfiles = poolAccountProfiles(realHomeDir);
+for (const profile of poolProfiles) {
   const base = accountPoolBases[profile.provider];
   if (!base) continue;
   pluginRegistry.register(accountVariant(base, profile, { realHomeDir }));
+}
+
+/**
+ * Plus one auto-routing provider per CLI that has more than one account, which
+ * spreads conversations over that CLI's accounts instead of asking per task.
+ */
+for (const [providerKey, base] of Object.entries(accountPoolBases)) {
+  const profiles = poolProfiles.filter((profile) => profile.provider === providerKey);
+  if (profiles.length < 2) continue;
+  pluginRegistry.register(autoAccountProvider(base, profiles, { realHomeDir }));
 }

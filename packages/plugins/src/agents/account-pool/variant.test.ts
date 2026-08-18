@@ -97,10 +97,7 @@ describe('accountVariant config-file capabilities', () => {
 
   it('writes trust into the account dir, not the host home', async () => {
     const { files, fs } = fakeHomeFs();
-    await variant.behavior.trust!.trustWorkspace(fs, {
-      providerId: variant.metadata.id,
-      workspacePath: '/repo/worktree-1',
-    });
+    await variant.behavior.trust!.trustWorkspace(fs, { workspacePath: '/repo/worktree-1' });
     // Home-rooted fs + '.claude-oddness' prefix = <account dir>/.claude.json.
     expect([...files.keys()]).toEqual(['.claude-oddness/.claude.json']);
     expect(JSON.parse(files.get('.claude-oddness/.claude.json')!)).toMatchObject({

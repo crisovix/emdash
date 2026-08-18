@@ -6,7 +6,9 @@ const GLOBAL_HOOK_PROVIDERS = [
   'auggie',
   'claude',
   // Account Pool variants of claude; their hooks resolve to the account's own
-  // config dir (see ./account-pool/variant.ts).
+  // config dir (see ./account-pool/variant.ts). The auto router installs into
+  // every account dir at once (see ./account-pool/auto.ts).
+  'claude-auto',
   'claude-empresa',
   'claude-personal',
   'codex',

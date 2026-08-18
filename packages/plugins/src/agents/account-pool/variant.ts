@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { envForAccount, type PoolAccountProfile } from '@emdash/core/primitives/account-pool/api';
 import type {
   AcpSpawnContext,
@@ -6,35 +5,7 @@ import type {
   CommandContext,
   PluginFs,
 } from '@emdash/core/services/agent-plugins/api/plugins';
-
-/**
- * A view of `fs` whose paths resolve under `prefix`. The mcp and trust helpers
- * bake in home-relative config names (`.claude.json`) and receive a home-rooted
- * fs from their callers, so re-rooting has to happen at the fs, not at the
- * config name. Prefixing rather than constructing a new local fs keeps the
- * caller's implementation and its root jail intact.
- */
-function prefixedFs(fs: PluginFs, prefix: string): PluginFs {
-  const at = (p: string): string => path.join(prefix, p);
-  return {
-    read: (p) => fs.read(at(p)),
-    write: (p, content) => fs.write(at(p), content),
-    delete: (p) => fs.delete(at(p)),
-    exists: (p) => fs.exists(at(p)),
-    list: (p) => fs.list(at(p)),
-  };
-}
-
-/**
- * Path of `dir` relative to `homeDir`, or null when `dir` is not under it.
- * Null means the config-file capabilities cannot be re-rooted through a
- * home-rooted fs and must stay off for that account.
- */
-function relativeToHome(homeDir: string, dir: string): string | null {
-  const rel = path.relative(homeDir, dir);
-  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return null;
-  return rel;
-}
+import { prefixedFs, relativeToHome } from './fs-reroot';
 
 /**
  * Bind a base agent provider to one Account Pool account, producing a distinct
