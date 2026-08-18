@@ -57,11 +57,19 @@ function parse(raw: string): RoutingFile {
 /**
  * A store backed by `filePath`.
  *
- * `maxRoutes` caps the file: conversations are unbounded over time, and an
- * ever-growing map read on every spawn would eventually cost more than it saves.
- * Oldest bindings are dropped first — they belong to conversations long finished,
- * and a dropped binding degrades to hash routing, which is the pre-avoidance
- * behavior rather than a failure.
+ * `maxRoutes` caps the file: conversations accumulate without bound, and this is
+ * read synchronously on every spawn, so an ever-growing map would eventually cost
+ * more than it saves. Oldest bindings are dropped first.
+ *
+ * Be precise about what a dropped binding costs: resuming that conversation falls
+ * back to the hash, which may pick a different account than the one holding its
+ * session, and the resume then fails to find it. The cap is a deliberate trade —
+ * only conversations older than `maxRoutes` others are exposed, and those are
+ * long finished — but it is a correctness risk for a very old conversation, not
+ * merely a loss of avoidance.
+ *
+ * Insertion order is what carries age here, which holds because conversation ids
+ * are UUIDs: integer-like keys would be reordered by the JS object key rules.
  */
 export function createRoutingStore(
   filePath: string,

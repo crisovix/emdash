@@ -219,11 +219,15 @@ export function autoAccountProvider(
               ...acp,
               buildSpawn: (ctx: AcpSpawnContext) => {
                 const spawn = acp.buildSpawn(ctx);
-                // ACP connections are pooled per (providerId, cwd), so the cwd
-                // is the routing key that keeps one workspace on one account.
-                // A connection is never "resumed" the way a TUI session is — the
-                // pool key is the workspace itself — so it routes as fresh and
-                // gets the same avoidance and binding as a new conversation.
+                // ACP connections are pooled per (providerId, cwd), so the cwd is
+                // the routing key that keeps one workspace on one account. It
+                // routes as fresh — there is no resume flag to consult here — so
+                // the first spawn for a workspace gets avoidance and is then bound.
+                //
+                // Consequence worth knowing: once bound, a workspace stays on its
+                // account even after that account is rate-limited, because ACP
+                // session state lives in the account's config dir just as a TUI
+                // session does. Avoidance protects the first spawn, not later ones.
                 const env = route(ctx.cwd, false);
                 return { ...spawn, env: { ...spawn.env, ...env } };
               },
