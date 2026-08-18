@@ -52,3 +52,17 @@ export function envForAccount(
       };
   }
 }
+
+export {
+  accountState,
+  accumulateUsage,
+  classifyFailure,
+  parseTranscriptLine,
+  RATE_LIMIT_WINDOW_MS,
+  type AccountFailure,
+  type AccountFailureKind,
+  type AccountState,
+  type AccountUsage,
+  type TokenUsage,
+  type TranscriptEntry,
+} from './transcript';

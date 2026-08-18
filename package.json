@@ -13,6 +13,7 @@
     "affected": "nx affected -t lint typecheck test",
     "check": "node tooling/scripts/check.mjs",
     "doctor": "pnpm --dir apps/emdash-desktop run doctor",
+    "pool:report": "tsx tooling/scripts/pool-report.ts",
     "prune:boundary-allowlists": "node tooling/oxlint/scripts/prune-boundary-allowlists.mjs",
     "graph": "nx graph"
   },
