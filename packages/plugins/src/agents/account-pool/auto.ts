@@ -26,22 +26,83 @@ export function pickAccount<T>(accounts: readonly T[], key: string): T {
   return accounts[hash(key) % accounts.length]!;
 }
 
+type RoutableAccount = { profile: PoolAccountProfile; env: Record<string, string> };
+
+/**
+ * The account to spawn on, and whether that choice needs remembering.
+ *
+ * Three rules, in order:
+ *
+ * 1. A conversation already bound to an account keeps it. Its session lives in
+ *    that account's config dir, so moving it would leave the session unfindable.
+ *    This outranks availability: a bound account that is now rate-limited is
+ *    still the only place the conversation can continue.
+ * 2. A resume with no binding falls back to the hash. That covers conversations
+ *    started before any binding existed, and reproduces the original behavior.
+ * 3. A fresh conversation prefers an available account, and the choice is
+ *    returned as one to remember — precisely because it may deviate from the
+ *    hash, which is what rule 1 then has to honour.
+ */
+export function chooseAccount<T extends RoutableAccount>(
+  accounts: readonly T[],
+  input: {
+    key: string;
+    isResuming: boolean;
+    boundAccountId?: string;
+    unavailableIds: ReadonlySet<string>;
+  }
+): { account: T; bind: boolean } {
+  const bound = input.boundAccountId
+    ? accounts.find((a) => a.profile.id === input.boundAccountId)
+    : undefined;
+  if (bound) return { account: bound, bind: false };
+
+  if (input.isResuming) return { account: pickAccount(accounts, input.key), bind: false };
+
+  const available = accounts.filter((a) => !input.unavailableIds.has(a.profile.id));
+  // All unavailable means the information is useless, not that nothing can run:
+  // fall back to the full list so a spawn is still attempted.
+  const pool = available.length > 0 ? available : accounts;
+  return { account: pickAccount(pool, input.key), bind: true };
+}
+
+export type AutoAccountProviderOptions = {
+  realHomeDir: string;
+  /**
+   * Accounts to keep new work away from. Omitted means no avoidance, which is
+   * plain hash routing.
+   */
+  unavailableIds?: (now: number) => ReadonlySet<string>;
+  /** Where a fresh conversation's account choice is recorded. */
+  routing?: {
+    get(conversationId: string): string | undefined;
+    remember(conversationId: string, accountId: string): void;
+  };
+  /** Injected for tests. */
+  now?: () => number;
+};
+
 /**
  * A provider that spreads conversations across every account of one CLI, so
  * tasks distribute over the subscriptions without the user choosing per task.
  *
- * Assignment is a pure hash of the conversation id, not a counter, because a
- * conversation must always land back on the same account: session history and
- * project state live inside each account's own config dir, so resuming against
- * a different account would not find the session. Hashing gets that for free —
- * no persisted mapping to keep in sync, and it survives app restarts, which an
- * in-memory round-robin would not.
+ * Assignment starts from a pure hash of the conversation id, not a counter,
+ * because a conversation must always land back on the same account: session
+ * history and project state live inside each account's own config dir, so
+ * resuming against a different account would not find the session. Hashing gets
+ * that for free and survives app restarts, which an in-memory round-robin would
+ * not.
  *
- * The trade-off is that it balances by conversation count, not by quota actually
- * consumed: a long task and a short one weigh the same, and it cannot know an
- * account is rate-limited. Editing the account list also re-maps existing
- * conversations, which breaks resume for the ones that move — change the list
- * between sessions, not while tasks are live.
+ * When `unavailableIds` is supplied, a *fresh* conversation also steers away from
+ * accounts that are rate-limited or unusable, and the account it lands on is
+ * recorded through `routing` — once the choice can deviate from the hash, the
+ * deviation is the only thing that makes a later resume correct. See
+ * `chooseAccount` for the exact precedence.
+ *
+ * It still balances by conversation count rather than by quota consumed: a long
+ * task and a short one weigh the same. Editing the account list also re-maps
+ * conversations that have no recorded binding, which breaks resume for the ones
+ * that move — change the list between sessions, not while tasks are live.
  *
  * The per-account variants stay registered; this is an extra option, not a
  * replacement for picking one deliberately.
@@ -49,7 +110,7 @@ export function pickAccount<T>(accounts: readonly T[], key: string): T {
 export function autoAccountProvider(
   base: CLIAgentPluginProvider,
   profiles: readonly PoolAccountProfile[],
-  options: { realHomeDir: string }
+  options: AutoAccountProviderOptions
 ): CLIAgentPluginProvider {
   const accounts = profiles.map((profile) => ({
     profile,
@@ -57,6 +118,41 @@ export function autoAccountProvider(
     dirFromHome: relativeToHome(options.realHomeDir, profile.dir),
   }));
   const { prompt, acp, hooks, trust } = base.behavior;
+  const now = options.now ?? (() => Date.now());
+  const noneUnavailable: ReadonlySet<string> = new Set();
+
+  /** Availability and routing are best-effort: neither may break a spawn. */
+  function route(key: string, isResuming: boolean): Record<string, string> {
+    let unavailableIds = noneUnavailable;
+    try {
+      unavailableIds = options.unavailableIds?.(now()) ?? noneUnavailable;
+    } catch {
+      unavailableIds = noneUnavailable;
+    }
+
+    let boundAccountId: string | undefined;
+    try {
+      boundAccountId = options.routing?.get(key);
+    } catch {
+      boundAccountId = undefined;
+    }
+
+    const { account, bind } = chooseAccount(accounts, {
+      key,
+      isResuming,
+      ...(boundAccountId !== undefined ? { boundAccountId } : {}),
+      unavailableIds,
+    });
+
+    if (bind && options.routing) {
+      try {
+        options.routing.remember(key, account.profile.id);
+      } catch {
+        // A lost binding degrades to hash routing, not to a failed spawn.
+      }
+    }
+    return account.env;
+  }
 
   return {
     ...base,
@@ -111,7 +207,8 @@ export function autoAccountProvider(
                 // Emdash's conversation id: stable for the life of the
                 // conversation, including across resumes.
                 const key = ctx.sessionId ?? ctx.providerSessionId ?? '';
-                return { ...command, env: { ...command.env, ...pickAccount(accounts, key).env } };
+                const env = route(key, ctx.isResuming === true);
+                return { ...command, env: { ...command.env, ...env } };
               },
             },
           }
@@ -124,7 +221,11 @@ export function autoAccountProvider(
                 const spawn = acp.buildSpawn(ctx);
                 // ACP connections are pooled per (providerId, cwd), so the cwd
                 // is the routing key that keeps one workspace on one account.
-                return { ...spawn, env: { ...spawn.env, ...pickAccount(accounts, ctx.cwd).env } };
+                // A connection is never "resumed" the way a TUI session is — the
+                // pool key is the workspace itself — so it routes as fresh and
+                // gets the same avoidance and binding as a new conversation.
+                const env = route(ctx.cwd, false);
+                return { ...spawn, env: { ...spawn.env, ...env } };
               },
             },
           }

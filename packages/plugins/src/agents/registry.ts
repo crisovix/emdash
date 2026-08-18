@@ -1,9 +1,12 @@
 // The single plugin registry
 import os from 'node:os';
+import { readAccountStateQuick } from '@emdash/core/primitives/account-pool/node';
 import type { CLIAgentPluginProvider } from '@emdash/core/services/agent-plugins/api/plugins';
 import { createPluginRegistry } from '@emdash/shared/plugins';
 import { autoAccountProvider } from './account-pool/auto';
+import { createAvailabilityTracker } from './account-pool/availability';
 import { poolAccountProfiles } from './account-pool/profiles';
+import { createRoutingStore, defaultRoutingStorePath } from './account-pool/routing-store';
 import { accountVariant } from './account-pool/variant';
 import { provider as amp } from './impl/amp';
 import { provider as antigravity } from './impl/antigravity';
@@ -105,9 +108,25 @@ for (const profile of poolProfiles) {
 /**
  * Plus one auto-routing provider per CLI that has more than one account, which
  * spreads conversations over that CLI's accounts instead of asking per task.
+ *
+ * The tracker and the routing store are shared across those providers: one
+ * availability snapshot and one binding record for the whole pool.
  */
+export const poolAvailability = createAvailabilityTracker({
+  profiles: poolProfiles,
+  readState: (profile, now) => readAccountStateQuick(profile, { now }),
+});
+
+const poolRouting = createRoutingStore(defaultRoutingStorePath(realHomeDir));
+
 for (const [providerKey, base] of Object.entries(accountPoolBases)) {
   const profiles = poolProfiles.filter((profile) => profile.provider === providerKey);
   if (profiles.length < 2) continue;
-  pluginRegistry.register(autoAccountProvider(base, profiles, { realHomeDir }));
+  pluginRegistry.register(
+    autoAccountProvider(base, profiles, {
+      realHomeDir,
+      unavailableIds: (now) => poolAvailability.unavailableIds(now),
+      routing: poolRouting,
+    })
+  );
 }

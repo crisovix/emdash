@@ -1,9 +1,10 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { open, readdir, readFile, stat, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import {
   accountState,
   accumulateUsage,
   parseTranscriptLine,
+  RATE_LIMIT_WINDOW_MS,
   type AccountState,
   type AccountUsage,
   type PoolAccountProfile,
@@ -153,6 +154,84 @@ function zeroUsage(): AccountUsage {
     messages: 0,
     byModel: {},
   };
+}
+
+/**
+ * Just the availability of an account, read cheaply enough to poll.
+ *
+ * `readAccountReport` walks every transcript, which on an established account
+ * means tens of thousands of turns — fine for a report, far too slow to check
+ * before spawning. Availability only depends on the newest events, so this reads
+ * the tail of the few most recently touched transcripts instead.
+ *
+ * The bound is deliberate: a limit that predates those files has either been
+ * superseded by later activity or aged out of the session window anyway.
+ */
+export async function readAccountStateQuick(
+  profile: PoolAccountProfile,
+  options: {
+    now: number;
+    rateLimitWindowMs?: number;
+    /** Newest transcripts to inspect. */
+    maxFiles?: number;
+    /** Bytes to read from the end of each. */
+    tailBytes?: number;
+  }
+): Promise<AccountState> {
+  if (profile.provider !== 'claude') return { state: 'ok' };
+
+  const window = options.rateLimitWindowMs ?? RATE_LIMIT_WINDOW_MS;
+  const maxFiles = options.maxFiles ?? 8;
+  const tailBytes = options.tailBytes ?? 64 * 1024;
+
+  let files: string[];
+  try {
+    files = await listTranscripts(profile.dir);
+  } catch {
+    return { state: 'ok' };
+  }
+
+  const stamped: { file: string; mtimeMs: number; size: number }[] = [];
+  for (const file of files) {
+    try {
+      const info = await stat(file);
+      // Files older than the window cannot hold a limit that is still in force.
+      if (info.mtimeMs < options.now - window) continue;
+      stamped.push({ file, mtimeMs: info.mtimeMs, size: info.size });
+    } catch {
+      // Raced with a session writing; skip.
+    }
+  }
+  stamped.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  const entries: TranscriptEntry[] = [];
+  for (const { file, size } of stamped.slice(0, maxFiles)) {
+    for (const line of (await readTail(file, size, tailBytes)).split('\n')) {
+      const entry = parseTranscriptLine(line);
+      if (entry) entries.push(entry);
+    }
+  }
+
+  return accountState(entries, { now: options.now, rateLimitWindowMs: window });
+}
+
+async function readTail(file: string, size: number, tailBytes: number): Promise<string> {
+  let handle: FileHandle | undefined;
+  try {
+    handle = await open(file, 'r');
+    const start = Math.max(0, size - tailBytes);
+    const length = size - start;
+    if (length <= 0) return '';
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, start);
+    const text = buffer.toString('utf-8');
+    // A mid-file start almost certainly lands inside a line; drop the fragment.
+    return start === 0 ? text : text.slice(text.indexOf('\n') + 1);
+  } catch {
+    return '';
+  } finally {
+    await handle?.close().catch(() => {});
+  }
 }
 
 /** Reports for every account, read concurrently. */
