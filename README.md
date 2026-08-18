@@ -18,6 +18,10 @@
 
 </div>
 
+> **Fork note:** this is a personal fork used as the base for a multi-account
+> ("Account Pool") layer on top of Emdash's agent provider spawning. See
+> `../docs/ARQUITECTURA-EMDASH.md` in the parent repo for the injection point.
+
 Emdash is a desktop app for running AI coding agents in parallel. Each task runs in its
 own Git worktree, so you can explore multiple fixes or features at once, review the
 diffs, and merge what works.
