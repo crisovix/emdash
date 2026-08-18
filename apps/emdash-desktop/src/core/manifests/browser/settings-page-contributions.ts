@@ -1,3 +1,4 @@
+import { accountPoolSettingsPage } from '@core/features/account-pool/contributions/settings-page';
 import { promptsSettingsPage } from '@core/features/library/contributions/settings-page';
 import {
   conversationsSettingsPage,
@@ -31,5 +32,6 @@ export const settingsPageContributions = [
   agentsSettingsPage,
   mcpSettingsPage,
   skillsSettingsPage,
+  accountPoolSettingsPage,
   machinesConnectionsPage,
 ] as const satisfies readonly SettingsPageContribution<Exclude<SettingsPageTab, 'docs'>>[];

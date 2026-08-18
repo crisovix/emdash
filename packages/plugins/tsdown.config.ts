@@ -12,6 +12,7 @@ const mainConfig = {
     'agents/helpers/adapter-assets': 'src/agents/helpers/adapter-assets.ts',
     'agents/helpers/adapter-validation': 'src/agents/helpers/adapter-validation.ts',
     'agents/types': 'src/agents/types.ts',
+    'agents/account-pool': 'src/agents/account-pool/index.ts',
     integrations: 'src/integrations/index.ts',
     issues: 'src/issues/index.ts',
   },

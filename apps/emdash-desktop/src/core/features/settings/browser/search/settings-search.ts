@@ -148,6 +148,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     description: 'Manage reusable local agent skills.',
     keywords: ['skill modules', 'agents'],
   },
+  {
+    id: 'account-pool',
+    label: 'Account Pool',
+    tab: 'account-pool',
+    description: 'Usage and availability of each agent subscription in the pool.',
+    keywords: ['accounts', 'subscriptions', 'quota', 'rate limit', 'tokens', 'usage'],
+  },
 
   // Integrations
   {

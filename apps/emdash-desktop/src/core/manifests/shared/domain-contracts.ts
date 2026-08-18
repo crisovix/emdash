@@ -1,3 +1,4 @@
+import { accountPoolContract, accountPoolDomain } from '@core/features/account-pool/api';
 import { accountContract, accountDomain } from '@core/features/account/api';
 import { agentsContract, agentsDomain } from '@core/features/agents/api';
 import { automationsContract, automationsDomain } from '@core/features/automations/api';
@@ -67,6 +68,7 @@ export const desktopDomainContracts = {
   [sourceControlDomain]: sourceControlContract,
   [mcpDomain]: mcpContract,
   [skillsDomain]: skillsContract,
+  [accountPoolDomain]: accountPoolContract,
   [terminalsDomain]: terminalsContract,
   [mementosDomain]: mementosWireContract,
   [notificationsDomain]: notificationsContract,

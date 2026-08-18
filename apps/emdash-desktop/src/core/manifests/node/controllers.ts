@@ -9,6 +9,7 @@ import {
   type ContractImpl,
   type Controller,
 } from '@emdash/wire/rpc';
+import { createAccountPoolWireController } from '@core/features/account-pool/node/wire-controller';
 import type { EmdashAccountService } from '@core/features/account/node/services/emdash-account-service';
 import { createAccountWireController } from '@core/features/account/node/wire-controller';
 import { createAgentOperations } from '@core/features/agents/node/controller';
@@ -260,6 +261,9 @@ export const desktopNodeControllers = {
   },
   skills: {
     create: ({ runtimes }) => createSkillsWireController({ runtimes }),
+  },
+  accountPool: {
+    create: () => createAccountPoolWireController(),
   },
   terminals: {
     create: ({
